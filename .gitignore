@@ -30,7 +30,7 @@ env/
 .env.local
 
 # Vector Store
-vector_store/
+vectordb_store/
 
 # Logs
 logs/

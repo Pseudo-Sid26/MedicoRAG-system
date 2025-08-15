@@ -90,7 +90,7 @@ def create_directories():
     print("Creating directory structure...")
 
     directories = [
-        "vector_store",
+        "vectordb_store",
         "logs",
         "data",
         "data/uploads",
@@ -122,7 +122,7 @@ APP_ENV=development
 DEBUG=true
 
 # Vector Store Configuration
-CHROMA_PERSIST_DIRECTORY=./vector_store
+CHROMA_PERSIST_DIRECTORY=./vectordb_store
 COLLECTION_NAME=medical_documents
 
 # Model Configuration
@@ -192,7 +192,7 @@ env/
 .env.local
 
 # Vector Store
-vector_store/
+vectordb_store/
 
 # Logs
 logs/
@@ -267,7 +267,7 @@ def verify_installation():
         return False
 
     # Check if key directories exist
-    required_dirs = ["vector_store", "logs", "data"]
+    required_dirs = ["vectordb_store", "logs", "data"]
     for directory in required_dirs:
         if not Path(directory).exists():
             print(f"❌ Directory {directory} not found")
