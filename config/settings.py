@@ -8,15 +8,25 @@ load_dotenv()
 
 def get_secret(key: str, default=None):
     """Get secret from Streamlit secrets or environment variables"""
+    # First try environment variables (works for local and some cloud environments)
+    env_value = os.getenv(key, default)
+    if env_value:
+        return env_value
+    
+    # Then try Streamlit secrets (for Streamlit Cloud)
     try:
-        # Try to get from Streamlit secrets first (for cloud deployment)
         import streamlit as st
         if hasattr(st, 'secrets') and key in st.secrets:
             return st.secrets[key]
-    except:
+    except ImportError:
+        # Streamlit not available (local development without streamlit installed)
         pass
-    # Fallback to environment variables (for local development)
-    return os.getenv(key, default)
+    except Exception:
+        # Any other error accessing secrets
+        pass
+    
+    # Return default if nothing found
+    return default
 
 
 class Settings:
@@ -143,8 +153,11 @@ class Settings:
 
     @classmethod
     def validate_config(cls) -> bool:
-        """Validate essential configuration"""
+        """Validate essential configuration - call this from app initialization"""
         try:
+            # Refresh the API key in case Streamlit secrets are now available
+            cls.GROQ_API_KEY = get_secret("GROQ_API_KEY")
+            
             # Check required API key
             if not cls.GROQ_API_KEY:
                 error_msg = (
@@ -355,12 +368,11 @@ QUALITY_INDICATORS = {
     "large_sample_size": 1.1
 }
 
-# Initialize configuration
+# Initialize logging only (validation will happen when needed)
 try:
     Settings.setup_logging()
-    Settings.validate_config()
-    logging.info(f"🏥 {Settings.APP_TITLE} v{Settings.APP_VERSION} initialized")
+    logging.info(f"🏥 {Settings.APP_TITLE} v{Settings.APP_VERSION} configuration loaded")
     logging.info(f"📊 Vector store: FAISS | Embedding: {Settings.EMBEDDING_MODEL}")
 except Exception as e:
-    logging.error(f"❌ Failed to initialize settings: {e}")
+    logging.error(f"❌ Failed to setup logging: {e}")
     raise

@@ -21,6 +21,14 @@ from src.medical_nlp.drug_interaction_checker import DrugInteractionChecker
 from src.medical_nlp.terminology_mapper import MedicalTerminologyMapper
 from src.utils.groq_utils import GroqUtils
 
+# Validate configuration after Streamlit is initialized
+try:
+    Settings.validate_config()
+except Exception as e:
+    st.error(f"Configuration Error: {e}")
+    st.info("Please check your environment configuration and try again.")
+    st.stop()
+
 # Page configuration
 st.set_page_config(
     page_title="Medical RAG System",
