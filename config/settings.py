@@ -3,38 +3,51 @@ import logging
 from typing import Dict, List
 from dotenv import load_dotenv
 
+# Load environment variables from .env file (for local development)
 load_dotenv()
+
+def get_secret(key: str, default=None):
+    """Get secret from Streamlit secrets or environment variables"""
+    try:
+        # Try to get from Streamlit secrets first (for cloud deployment)
+        import streamlit as st
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+    except:
+        pass
+    # Fallback to environment variables (for local development)
+    return os.getenv(key, default)
 
 
 class Settings:
     """Optimized settings configuration for Medical RAG System with FAISS"""
 
     # Core API Configuration
-    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-    HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
+    GROQ_API_KEY = get_secret("GROQ_API_KEY")
+    HUGGINGFACE_API_KEY = get_secret("HUGGINGFACE_API_KEY")
 
     # Model Configuration
-    GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-8b-8192")
-    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "tfidf")  # Default to TF-IDF for stability
+    GROQ_MODEL = get_secret("GROQ_MODEL", "llama3-8b-8192")
+    EMBEDDING_MODEL = get_secret("EMBEDDING_MODEL", "tfidf")  # Default to TF-IDF for stability
 
     # Vector Store Configuration (FAISS)
-    VECTOR_STORE_DIRECTORY = os.getenv("VECTOR_STORE_DIRECTORY", "./vectordb_store")
-    CHROMA_PERSIST_DIRECTORY = os.getenv("VECTOR_STORE_DIRECTORY", "./vectordb_store")  # For compatibility
-    COLLECTION_NAME = os.getenv("COLLECTION_NAME", "medical_documents")
-    EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "384"))
+    VECTOR_STORE_DIRECTORY = get_secret("VECTOR_STORE_DIRECTORY", "./vectordb_store")
+    CHROMA_PERSIST_DIRECTORY = get_secret("VECTOR_STORE_DIRECTORY", "./vectordb_store")  # For compatibility
+    COLLECTION_NAME = get_secret("COLLECTION_NAME", "medical_documents")
+    EMBEDDING_DIMENSION = int(get_secret("EMBEDDING_DIMENSION", "384"))
 
     # Processing Configuration
-    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
-    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
-    TOP_K_RETRIEVAL = int(os.getenv("TOP_K_RETRIEVAL", "5"))
-    SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.3"))  # Lowered for medical content
+    CHUNK_SIZE = int(get_secret("CHUNK_SIZE", "1000"))
+    CHUNK_OVERLAP = int(get_secret("CHUNK_OVERLAP", "200"))
+    TOP_K_RETRIEVAL = int(get_secret("TOP_K_RETRIEVAL", "5"))
+    SIMILARITY_THRESHOLD = float(get_secret("SIMILARITY_THRESHOLD", "0.3"))  # Lowered for medical content
 
     # Response Configuration
-    MAX_RESPONSE_TOKENS = int(os.getenv("MAX_RESPONSE_TOKENS", "800"))
-    RESPONSE_TEMPERATURE = float(os.getenv("RESPONSE_TEMPERATURE", "0.1"))
+    MAX_RESPONSE_TOKENS = int(get_secret("MAX_RESPONSE_TOKENS", "800"))
+    RESPONSE_TEMPERATURE = float(get_secret("RESPONSE_TEMPERATURE", "0.1"))
 
     # File Upload Configuration
-    MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", str(100 * 1024 * 1024)))  # 100MB
+    MAX_FILE_SIZE = int(get_secret("MAX_FILE_SIZE", str(100 * 1024 * 1024)))  # 100MB
     ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.docx', '.csv', '.md']
 
     # Application Configuration
@@ -43,7 +56,7 @@ class Settings:
     APP_VERSION = "2.0.0"
 
     # Logging Configuration
-    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+    LOG_LEVEL = get_secret("LOG_LEVEL", "INFO")
     LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
     # Medical Content Configuration
@@ -134,7 +147,12 @@ class Settings:
         try:
             # Check required API key
             if not cls.GROQ_API_KEY:
-                raise ValueError("GROQ_API_KEY is required. Set it in your .env file.")
+                error_msg = (
+                    "GROQ_API_KEY is required. "
+                    "For local development: Set it in your .env file. "
+                    "For Streamlit Cloud: Add it to your app's secrets in the Streamlit Cloud dashboard."
+                )
+                raise ValueError(error_msg)
 
             # Create necessary directories
             os.makedirs(cls.VECTOR_STORE_DIRECTORY, exist_ok=True)
