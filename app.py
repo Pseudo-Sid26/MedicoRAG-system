@@ -23,10 +23,37 @@ from src.utils.groq_utils import GroqUtils
 
 # Validate configuration after Streamlit is initialized
 try:
+    # For Streamlit Cloud, try to access secrets directly as a fallback
+    if not os.getenv("GROQ_API_KEY"):
+        try:
+            if "GROQ_API_KEY" in st.secrets:
+                os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+                st.success("✅ API key loaded from Streamlit secrets")
+        except Exception as e:
+            st.warning(f"Could not access Streamlit secrets: {e}")
+    
     Settings.validate_config()
+    st.success("✅ Configuration validated successfully")
+    
 except Exception as e:
-    st.error(f"Configuration Error: {e}")
-    st.info("Please check your environment configuration and try again.")
+    st.error("## 🔧 Configuration Issue")
+    st.error(str(e))
+    
+    # Show debugging information
+    with st.expander("🔍 Debug Information"):
+        st.write("**Environment Variables:**")
+        env_vars = {k: "***" if "KEY" in k or "TOKEN" in k else v 
+                   for k, v in os.environ.items() if k.startswith(("GROQ", "STREAMLIT"))}
+        st.json(env_vars)
+        
+        st.write("**Streamlit Secrets:**")
+        try:
+            available_secrets = list(st.secrets.keys())
+            st.write(f"Available: {available_secrets}")
+        except Exception as secrets_error:
+            st.write(f"Error accessing secrets: {secrets_error}")
+    
+    st.info("💡 **To fix this:** Add your GROQ_API_KEY to Streamlit Cloud secrets")
     st.stop()
 
 # Page configuration

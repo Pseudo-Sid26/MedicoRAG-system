@@ -148,6 +148,26 @@
    - Wait for the app to build and deploy
    - Your app will be live at: `https://your-app-name.streamlit.app`
 
+#### 🔑 Configure Streamlit Cloud Secrets (CRITICAL)
+
+**If you get "GROQ_API_KEY is required" error:**
+
+1. **Go to your deployed app** (even if it shows an error)
+2. **Click the hamburger menu (≡)** in the bottom-right corner
+3. **Select "Manage app"** 
+4. **Click "Settings"** in the left sidebar
+5. **Click "Secrets"** tab
+6. **Add your API key** in TOML format:
+   ```toml
+   GROQ_API_KEY = "gsk_your_actual_groq_api_key_here"
+   ```
+7. **Click "Save"** - the app will automatically restart
+
+**⚠️ Common Issues:**
+- Make sure there are no extra spaces around the API key
+- Use double quotes around the API key value
+- Wait 1-2 minutes for the app to restart after saving secrets
+
 #### 🎯 Get Your Groq API Key
 
 1. Visit [console.groq.com](https://console.groq.com)

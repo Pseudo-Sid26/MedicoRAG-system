@@ -7,26 +7,44 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_secret(key: str, default=None):
-    """Get secret from Streamlit secrets or environment variables"""
-    # First try environment variables (works for local and some cloud environments)
-    env_value = os.getenv(key, default)
-    if env_value:
-        return env_value
+    """Get secret from environment variables or Streamlit secrets"""
+    # First try environment variables (always works)
+    env_value = os.getenv(key)
+    if env_value and env_value.strip():
+        return env_value.strip()
     
     # Then try Streamlit secrets (for Streamlit Cloud)
     try:
         import streamlit as st
-        if hasattr(st, 'secrets') and key in st.secrets:
-            return st.secrets[key]
+        # Check if we're in a Streamlit context and secrets exist
+        if hasattr(st, 'secrets') and hasattr(st.secrets, '_secrets') and st.secrets._secrets:
+            secrets_dict = st.secrets._secrets
+            if key in secrets_dict:
+                value = secrets_dict[key]
+                if value and str(value).strip():
+                    return str(value).strip()
     except ImportError:
-        # Streamlit not available (local development without streamlit installed)
+        # Streamlit not available
         pass
-    except Exception:
-        # Any other error accessing secrets
-        pass
+    except Exception as e:
+        # Log the error for debugging but don't fail
+        try:
+            import logging
+            logging.debug(f"Error accessing Streamlit secrets for {key}: {e}")
+        except:
+            pass
     
-    # Return default if nothing found
     return default
+
+def is_streamlit_cloud():
+    """Detect if running on Streamlit Cloud"""
+    # Check for Streamlit Cloud specific environment indicators
+    return (
+        os.getenv('STREAMLIT_SHARING_MODE') == 'cloud' or
+        os.getenv('STREAMLIT_SERVER_PORT') or
+        '/mount/src/' in os.getcwd() or
+        'streamlit.app' in os.getenv('HOSTNAME', '')
+    )
 
 
 class Settings:
@@ -155,16 +173,42 @@ class Settings:
     def validate_config(cls) -> bool:
         """Validate essential configuration - call this from app initialization"""
         try:
-            # Refresh the API key in case Streamlit secrets are now available
+            # Refresh the API key in case secrets are now available
             cls.GROQ_API_KEY = get_secret("GROQ_API_KEY")
             
+            # Enhanced debugging for Streamlit Cloud
+            if is_streamlit_cloud():
+                logging.info("🌐 Detected Streamlit Cloud environment")
+                try:
+                    import streamlit as st
+                    if hasattr(st, 'secrets'):
+                        available_secrets = list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else []
+                        logging.info(f"🔑 Available secrets: {available_secrets}")
+                    else:
+                        logging.warning("⚠️ Streamlit secrets not accessible yet")
+                except Exception as e:
+                    logging.warning(f"⚠️ Error checking Streamlit secrets: {e}")
+            
             # Check required API key
-            if not cls.GROQ_API_KEY:
-                error_msg = (
-                    "GROQ_API_KEY is required. "
-                    "For local development: Set it in your .env file. "
-                    "For Streamlit Cloud: Add it to your app's secrets in the Streamlit Cloud dashboard."
-                )
+            if not cls.GROQ_API_KEY or not cls.GROQ_API_KEY.strip():
+                if is_streamlit_cloud():
+                    error_msg = (
+                        "🔑 GROQ_API_KEY is required for Streamlit Cloud deployment. "
+                        "Please add it to your app's secrets:\n\n"
+                        "1. Go to your app dashboard\n"
+                        "2. Click 'Manage app' (⚙️ menu)\n"  
+                        "3. Go to Settings → Secrets\n"
+                        "4. Add: GROQ_API_KEY = \"your_api_key_here\"\n"
+                        "5. Save and wait for restart\n\n"
+                        "Get your free API key at: https://console.groq.com"
+                    )
+                else:
+                    error_msg = (
+                        "🔑 GROQ_API_KEY is required for local development. "
+                        "Please set it in your .env file:\n\n"
+                        "GROQ_API_KEY=your_api_key_here\n\n"
+                        "Get your free API key at: https://console.groq.com"
+                    )
                 raise ValueError(error_msg)
 
             # Create necessary directories
