@@ -14,7 +14,7 @@ from config.settings import Settings
 from src.data_processing.document_loader import DocumentLoader
 from src.data_processing.text_preprocessor import TextPreprocessor
 from src.data_processing.chunking_strategy import MedicalChunkingStrategy
-from src.embeddings.embedding_manager import EmbeddingManager
+from src.embeddings.simple_embedding_manager import EmbeddingManager
 from src.retrieval.retriever import MedicalRetriever
 from src.generation.groq_response_generator import GroqResponseGenerator
 from src.medical_nlp.drug_interaction_checker import DrugInteractionChecker
@@ -96,67 +96,6 @@ def init_session_state():
     if not st.session_state.api_key_valid and not st.session_state.get('api_key_checked', False):
         auto_validate_api_key()
         st.session_state.api_key_checked = True
-
-
-def auto_validate_api_key():
-    """Automatically validate API key from environment"""
-    api_key = Settings.GROQ_API_KEY
-
-    if api_key:
-        try:
-            validation = GroqUtils.validate_api_key(api_key)
-
-            if validation['valid']:
-                st.session_state.api_key_valid = True
-                st.session_state.groq_api_key = api_key
-                st.session_state.response_generator = GroqResponseGenerator(
-                    api_key=api_key,
-                    model="llama3-8b-8192"
-                )
-                st.session_state.selected_model = "llama3-8b-8192"
-                st.success("✅ API key automatically loaded from environment")
-        except Exception as e:
-            st.warning(f"Environment API key validation failed: {e}")
-    # If no API key or validation fails, the existing manual input will handle it
-
-    # Auto-validate API key from environment on first load
-    if not st.session_state.api_key_valid and not st.session_state.get('api_key_checked', False):
-        auto_validate_api_key()
-        st.session_state.api_key_checked = True
-
-
-def auto_validate_api_key():
-    """Automatically validate API key from environment"""
-    api_key = Settings.GROQ_API_KEY
-
-    if api_key:
-        try:
-            validation = GroqUtils.validate_api_key(api_key)
-
-            if validation['valid']:
-                st.session_state.api_key_valid = True
-                st.session_state.groq_api_key = api_key
-                st.session_state.response_generator = GroqResponseGenerator(
-                    api_key=api_key,
-                    model="llama3-8b-8192"
-                )
-                st.session_state.selected_model = "llama3-8b-8192"
-                # Show success message only once
-                if not st.session_state.get('api_success_shown', False):
-                    st.success("✅ API key automatically loaded from environment")
-                    st.session_state.api_success_shown = True
-            else:
-                st.error(f"❌ Invalid API key in environment: {validation['message']}")
-        except Exception as e:
-            st.error(f"❌ Error validating environment API key: {e}")
-    else:
-        st.warning("⚠️ No API key found in environment. Please set GROQ_API_KEY in your .env file.")
-
-    # Auto-validate API key from environment on first load
-    if not st.session_state.api_key_valid and not st.session_state.get('api_key_checked', False):
-        auto_validate_api_key()
-        st.session_state.api_key_checked = True
-
 
 def auto_validate_api_key():
     """Automatically validate API key from environment"""
@@ -304,7 +243,7 @@ def init_components():
             'chunking_strategy': chunking_strategy,
             'embedding_manager': EmbeddingManager(model_name=Settings.EMBEDDING_MODEL),
             'retriever': MedicalRetriever(
-                persist_directory=Settings.CHROMA_PERSIST_DIRECTORY,
+                persist_directory=Settings.VECTOR_STORE_DIRECTORY,
                 collection_name=Settings.COLLECTION_NAME
             ),
             'drug_checker': DrugInteractionChecker(),
@@ -934,114 +873,6 @@ def format_medical_response(response_text: str) -> dict:
 
     return formatted
 
-
-def save_to_history(query: str, response: str):
-    """Save to chat history"""
-    entry = {
-        'query': query,
-        'response': response[:200] + "..." if len(response) > 200 else response,
-        'timestamp': datetime.now().strftime('%H:%M')
-    }
-
-    st.session_state.chat_history.append(entry)
-
-    # Keep only last 5
-    if len(st.session_state.chat_history) > 5:
-        st.session_state.chat_history = st.session_state.chat_history[-5:]
-
-
-def render_chat_history():
-    """Show recent chat history"""
-    if st.session_state.chat_history:
-        with st.expander("📜 Recent Queries", expanded=False):
-            for chat in reversed(st.session_state.chat_history[-3:]):
-                st.markdown(f"**Q:** {chat['query'][:50]}...")
-                st.markdown(f"**A:** {chat['response']}")
-                st.caption(f"🕒 {chat['timestamp']}")
-                st.divider()
-
-
-def tools_section():
-    """Medical tools"""
-    st.markdown("## 🧰 Medical Tools")
-
-    tool = st.selectbox(
-        "Select Tool",
-        ["💊 Drug Interactions", "🏷️ Medical Codes"]
-    )
-
-    if "Drug" in tool:
-        drug_tool()
-    elif "Medical" in tool:
-        terminology_tool()
-
-
-def drug_tool():
-    """Drug interaction checker"""
-    st.markdown("### 💊 Drug Interaction Checker")
-
-    medications = st.text_area(
-        "Enter medications (one per line):",
-        placeholder="warfarin\naspirin\nmetformin"
-    )
-
-    if medications and st.button("🔍 Check Interactions"):
-        try:
-            med_list = [m.strip() for m in medications.split('\n') if m.strip()]
-
-            if len(med_list) < 2:
-                st.warning("Enter at least 2 medications")
-                return
-
-            analysis = st.session_state.drug_checker.analyze_medication_list(
-                '\n'.join(med_list)
-            )
-
-            # Display results
-            interactions = analysis.get('interactions', [])
-
-            if interactions:
-                st.markdown("#### ⚠️ Interactions Found")
-                for interaction in interactions:
-                    severity = interaction.get('severity', 'unknown')
-                    if severity == 'major':
-                        st.error(f"🚨 **{interaction['drug1']} + {interaction['drug2']}:** {interaction['description']}")
-                    else:
-                        st.warning(
-                            f"⚠️ **{interaction['drug1']} + {interaction['drug2']}:** {interaction['description']}")
-            else:
-                st.success("✅ No major interactions found")
-
-        except Exception as e:
-            st.error(f"❌ Analysis failed: {e}")
-
-
-def terminology_tool():
-    """Medical terminology mapper"""
-    st.markdown("### 🏷️ Medical Code Mapper")
-
-    medical_text = st.text_area(
-        "Enter medical text:",
-        placeholder="Patient with diabetes mellitus and hypertension..."
-    )
-
-    if medical_text and st.button("🔍 Map Codes"):
-        try:
-            analysis = st.session_state.terminology_mapper.analyze_medical_text(medical_text)
-
-            # Show results
-            terms = analysis.get('terms_found', [])
-            if terms:
-                st.markdown("#### 🏷️ Found Terms")
-                for term in terms:
-                    st.markdown(f"**{term['term']}** ({term['category']})")
-                    if term.get('icd10'):
-                        st.caption(f"ICD-10: {term['icd10']}")
-            else:
-                st.info("No medical terms found")
-
-        except Exception as e:
-            st.error(f"❌ Analysis failed: {e}")
 
 def save_to_history(query: str, response: str):
     """Save to chat history"""

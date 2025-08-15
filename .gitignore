@@ -24,23 +24,21 @@ wheels/
 medical_rag_env/
 venv/
 env/
+.venv/
 
 # Environment Variables
 .env
 .env.local
 
-# Vector Store
+# Vector Store & Embeddings
 vectordb_store/
+vector_store/
+*.pkl
+embeddings_cache*.pkl
 
 # Logs
 logs/
 *.log
-
-# Data
-data/uploads/*
-data/processed/*
-!data/uploads/.gitkeep
-!data/processed/.gitkeep
 
 # IDE
 .vscode/
@@ -55,10 +53,20 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 
-# Cache
+# Cache & Temporary files
 .cache/
 *.cache
-
-# Temporary files
 *.tmp
 *.temp
+
+# Test files
+test_*.py
+*_test.py
+deployment_check.py
+DEPLOYMENT_STATUS.md
+
+# Models (if large)
+models/
+
+# Streamlit secrets
+.streamlit/secrets.toml

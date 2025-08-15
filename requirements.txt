@@ -1,42 +1,26 @@
 
 
-# Updated requirements.txt - Compatible with Python 3.13
-# Core ML and AI libraries
-torch>=2.5.0
-sentence-transformers>=2.2.2
-transformers>=4.35.2
-scikit-learn>=1.3.2
-numpy>=1.24.3
+# Optimized requirements.txt for MedRAG System - Streamlit Cloud Ready
+# Core dependencies
+streamlit>=1.28.0
+numpy>=1.24.0,<1.25.0
+pandas>=2.0.0
 
-# LangChain ecosystem
+# AI/ML dependencies  
+groq>=0.4.1
 langchain>=0.1.16
 langchain-groq>=0.1.3
-groq>=0.4.1
-
-# Vector database and embeddings
-faiss-cpu>=1.7.4
-
-# Data processing
-pandas>=2.2.0
-datasets>=2.14.6
-
-# NLP libraries
-nltk>=3.8.1
-spacy>=3.7.2
+faiss-cpu>=1.7.4,<1.8.0
 
 # Document processing
-PyPDF2>=3.0.1  # Fixed capitalization
+PyPDF2>=3.0.1
 python-docx>=1.1.0
-beautifulsoup4>=4.12.2
+beautifulsoup4>=4.12.0
+nltk>=3.8.1
 
-# Web and API
+# Utilities
 requests>=2.31.0
-streamlit>=1.28.1
-streamlit-chat>=0.1.1
-
-# Visualization
-plotly>=5.17.0
-
-# Evaluation and utilities
-ragas>=0.0.22
 python-dotenv>=1.0.0
+
+# Note: Using custom TF-IDF implementation to avoid scikit-learn threading conflicts
+# Optimized for Streamlit Cloud deployment

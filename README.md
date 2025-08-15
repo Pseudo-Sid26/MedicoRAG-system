@@ -6,13 +6,16 @@
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg?style=flat-square&logo=python)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io/)
-[![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20Database-orange?style=flat-square)](https://www.trychroma.com/)
+[![FAISS](https://img.shields.io/badge/FAISS-Vector%20Database-orange?style=flat-square)](https://faiss.ai/)
+[![Deploy](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/pseudo-sid26/medicorag-system/main/app.py)
 
 **MedicoRAG** is an AI-powered **Retrieval-Augmented Generation (RAG)** system designed to assist healthcare professionals by processing **medical journals, clinical guidelines, and patient data** (anonymized) to deliver **accurate, evidence-based answers** quickly.
 
+🚀 **[Deploy to Streamlit Cloud Now!](https://share.streamlit.io/pseudo-sid26/medicorag-system/main/app.py)**
+
 ⚠️ **Disclaimer:** For healthcare professionals only. Always verify AI-generated information with authoritative sources.
 
-[🚀 Features](#-features) • [📦 Installation](#-installation) • [📖 How It Works](#-how-it-works) • [🤝 Contributing](#-contributing)
+[🚀 Features](#-features) • [☁️ Deploy Now](#️-cloud-deployment) • [📦 Installation](#-installation) • [📖 How It Works](#-how-it-works) • [🤝 Contributing](#-contributing)
 
 </div>
 
@@ -24,6 +27,7 @@
 - [🛠 Tech Stack](#-tech-stack)
 - [📂 Project Structure](#-project-structure)
 - [📦 Installation](#-installation)
+- [☁️ Cloud Deployment](#️-cloud-deployment)
 - [📖 How It Works](#-how-it-works)
 - [📌 Example Use Cases](#-example-use-cases)
 - [🎯 Demo Screenshots](#-demo-screenshots)
@@ -85,10 +89,99 @@
 |----------|------------|---------|
 | **Frontend** | ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=flat-square&logo=streamlit&logoColor=white) | Interactive web interface |
 | **Backend** | ![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white) | Core application logic |
-| **AI/ML** | ![LLM](https://img.shields.io/badge/LLM-RAG%20Pipeline-green?style=flat-square) | Language model + retrieval |
-| **Database** | ![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20DB-orange?style=flat-square) | Vector embeddings storage |
-| **Embeddings** | ![ONNX](https://img.shields.io/badge/ONNX-OpenAI-blue?style=flat-square) | Text vectorization |
-| **OCR** | ![Tesseract](https://img.shields.io/badge/Tesseract-OCR-red?style=flat-square) | Document text extraction |
+| **AI/ML** | ![Groq](https://img.shields.io/badge/Groq-LLM%20API-green?style=flat-square) | Fast language model inference |
+| **Database** | ![FAISS](https://img.shields.io/badge/FAISS-Vector%20DB-orange?style=flat-square) | Vector embeddings storage |
+| **Embeddings** | ![TF-IDF](https://img.shields.io/badge/TF--IDF-Custom%20Implementation-blue?style=flat-square) | Text vectorization |
+| **Processing** | ![NLP](https://img.shields.io/badge/NLP-Medical%20Processing-red?style=flat-square) | Document text extraction |
+
+---
+
+## ☁️ Cloud Deployment
+
+### Deploy to Streamlit Cloud
+
+#### Prerequisites
+- GitHub account
+- Streamlit Cloud account (free)
+- Groq API key
+
+#### Quick Deploy Steps
+
+1. **🍴 Fork this repository**
+   - Click the "Fork" button on GitHub
+   - Choose your account as the destination
+
+2. **🔗 Connect to Streamlit Cloud**
+   - Go to [share.streamlit.io](https://share.streamlit.io)
+   - Sign in with your GitHub account
+   - Click "New app"
+
+3. **⚙️ Configure deployment**
+   ```
+   Repository: your-username/MedicoRAG-system
+   Branch: main
+   Main file path: app.py
+   ```
+
+4. **🔐 Set up secrets**
+   
+   In Streamlit Cloud, go to **App settings > Secrets** and add:
+   ```toml
+   # Required secrets
+   GROQ_API_KEY = "your_groq_api_key_here"
+   
+   # Optional secrets (with defaults)
+   GROQ_MODEL = "llama3-8b-8192"
+   EMBEDDING_MODEL = "tfidf"
+   VECTOR_STORE_DIRECTORY = "./vectordb_store"
+   COLLECTION_NAME = "medical_documents"
+   CHUNK_SIZE = "1000"
+   CHUNK_OVERLAP = "200"
+   TOP_K_RETRIEVAL = "5"
+   MAX_RESPONSE_TOKENS = "800"
+   RESPONSE_TEMPERATURE = "0.1"
+   LOG_LEVEL = "INFO"
+   ```
+
+5. **🚀 Deploy**
+   - Click "Deploy!"
+   - Wait for the app to build and deploy
+   - Your app will be live at: `https://your-app-name.streamlit.app`
+
+#### 🎯 Get Your Groq API Key
+
+1. Visit [console.groq.com](https://console.groq.com)
+2. Sign up for a free account
+3. Navigate to API Keys section
+4. Create a new API key
+5. Copy the key and add it to Streamlit secrets
+
+#### 📋 Deployment Checklist
+
+- [ ] Repository forked to your GitHub
+- [ ] Streamlit Cloud account created
+- [ ] Groq API key obtained
+- [ ] Secrets configured in Streamlit Cloud
+- [ ] App deployed and running
+- [ ] Test document upload functionality
+- [ ] Test medical query functionality
+
+#### 🔧 Troubleshooting Deployment
+
+**Common Issues:**
+
+| Issue | Solution |
+|-------|----------|
+| **Build fails** | Check `requirements.txt` for compatibility |
+| **API errors** | Verify `GROQ_API_KEY` in secrets |
+| **Memory issues** | Restart the app in Streamlit Cloud |
+| **Slow performance** | Check vector store initialization |
+
+**Performance Tips:**
+- Vector store persists between sessions
+- First query may take longer (model loading)
+- Subsequent queries are faster
+- Consider upgrading to Streamlit Cloud Pro for better performance
 
 ---
 
@@ -162,15 +255,15 @@ graph TD
 
 2. **🔧 Processing Pipeline**: Documents are processed using OCR (if needed), text extraction, and chunking
 
-3. **🔢 Embedding Generation**: Text chunks are converted to vector embeddings using state-of-the-art models
+3. **🔢 Embedding Generation**: Text chunks are converted to vector embeddings using custom TF-IDF implementation
 
-4. **💾 Vector Storage**: Embeddings are stored in ChromaDB for efficient similarity search
+4. **💾 Vector Storage**: Embeddings are stored in FAISS for efficient similarity search
 
 5. **💬 Query Processing**: Users ask medical questions in natural language
 
-6. **🔍 Retrieval**: System performs semantic search to find most relevant document chunks
+6. **🔍 Retrieval**: System performs semantic search to find most relevant document chunks using FAISS
 
-7. **🤖 Answer Generation**: LLM generates evidence-based responses with proper citations
+7. **🤖 Answer Generation**: Groq LLM generates evidence-based responses with proper citations
 
 ---
 
@@ -196,23 +289,27 @@ graph TD
 Create a `.env` file in the root directory:
 
 ```env
-# API Keys
+# API Keys (Required for deployment)
 GROQ_API_KEY=your_groq_api_key_here
-HUGGINGFACE_API_KEY=your_huggingface_key_here
-
-# Database Configuration
-CHROMA_PERSIST_DIRECTORY=./data/embeddings
-CHROMA_COLLECTION_NAME=medical_documents
-
-# Application Settings
-MAX_UPLOAD_SIZE=100MB
-CHUNK_SIZE=1000
-CHUNK_OVERLAP=200
 
 # Model Configuration
-EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-LLM_MODEL=gpt-3.5-turbo
-TEMPERATURE=0.1
+GROQ_MODEL=llama3-8b-8192
+EMBEDDING_MODEL=tfidf
+
+# Database Configuration
+VECTOR_STORE_DIRECTORY=./vectordb_store
+COLLECTION_NAME=medical_documents
+
+# Application Settings
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+TOP_K_RETRIEVAL=5
+MAX_RESPONSE_TOKENS=800
+RESPONSE_TEMPERATURE=0.1
+
+# Processing Settings
+MAX_FILE_SIZE=104857600
+LOG_LEVEL=INFO
 ```
 
 ### Customization Options
