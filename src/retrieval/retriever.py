@@ -1,5 +1,5 @@
 
-
+import os
 import numpy as np
 from typing import List, Dict, Any, Optional
 import chromadb
@@ -33,7 +33,7 @@ class MedicalRetriever:
                 collection = client.get_collection(name=self.collection_name)
                 logger.info(f"Loaded existing collection: {self.collection_name}")
             except ValueError:
-                collection = client.create_collection(
+                collection = client.get_or_create_collection(
                     name=self.collection_name,
                     metadata={"description": "Medical documents"}
                 )
