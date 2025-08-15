@@ -406,7 +406,8 @@ def render_sidebar():
             except:
                 pass
 
-        # Quick actions
+        # Quick actions - UPDATED SECTION
+        st.markdown("### ⚡ Actions")
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🧪 Test", key="test_system"):
@@ -414,6 +415,20 @@ def render_sidebar():
         with col2:
             if st.button("🔄 Reset", key="reset_system"):
                 reset_system()
+
+        # Add Clear Database button - NEW ADDITION
+        if st.button("🗑️ Clear Database", key="clear_db", type="secondary"):
+            try:
+                if hasattr(st.session_state, 'retriever'):
+                    st.session_state.retriever.clear_collection()
+                    st.success("Database cleared successfully!")
+                    # Reset docs loaded status
+                    st.session_state.docs_loaded = False
+                    st.rerun()  # Updated method name for newer Streamlit versions
+                else:
+                    st.error("Retriever not initialized")
+            except Exception as e:
+                st.error(f"Error clearing database: {e}")
 
 
 def validate_api_key(api_key: str):

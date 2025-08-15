@@ -1,258 +1,334 @@
 
-
 import numpy as np
-from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Any, Optional
 import logging
 import pickle
 import os
-from pathlib import Path
 import hashlib
-import threading
+import re
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 logger = logging.getLogger(__name__)
 
 
-class EmbeddingManager:
-    """Manages embeddings for medical documents using HuggingFace models"""
+class MinimalEmbeddingManager:
+    """Minimal embedding manager using TF-IDF (no external model dependencies)"""
 
-    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = "tfidf", cache_dir: str = "./models"):
+        """Initialize with TF-IDF vectorizer"""
         self.model_name = model_name
-        self.model = None
-        self.embedding_cache = {}
-        self.cache_file = f"embeddings_cache_{model_name.split('/')[-1]}.pkl"
-        self._cache_lock = threading.Lock()
+        self.cache_dir = cache_dir
+        self.embedding_dim = 384  # Match sentence-transformers dimension
 
-        self._load_model()
-        self._load_cache()
+        os.makedirs(cache_dir, exist_ok=True)
 
-    def _load_model(self):
-        """Load the sentence transformer model"""
+        # Initialize TF-IDF vectorizer with safer settings
+        self.vectorizer = TfidfVectorizer(
+            max_features=self.embedding_dim,
+            stop_words='english',
+            ngram_range=(1, 2),
+            min_df=1,  # Minimum document frequency
+            max_df=1.0,  # Maximum document frequency (allow all)
+            lowercase=True,
+            strip_accents='unicode'
+        )
+
+        # Track if vectorizer is fitted
+        self.is_fitted = False
+
+        logger.info(f"Initialized minimal embedding manager with TF-IDF")
+
+    def _preprocess_text(self, text: str) -> str:
+        """Basic text preprocessing"""
+        if not text:
+            return ""
+
+        # Convert to lowercase
+        text = text.lower()
+
+        # Remove special characters but keep medical terms
+        text = re.sub(r'[^\w\s\-\.]', ' ', text)
+
+        # Remove extra whitespace
+        text = ' '.join(text.split())
+
+        return text
+
+    def _ensure_fitted(self, texts: List[str]):
+        """Ensure vectorizer is fitted on some corpus"""
+        if not self.is_fitted:
+            # Fit on provided texts
+            processed_texts = [self._preprocess_text(text) for text in texts]
+            # Filter empty texts
+            valid_texts = [t for t in processed_texts if t.strip()]
+
+            # Need at least 2 documents for TF-IDF
+            if len(valid_texts) >= 2:
+                try:
+                    self.vectorizer.fit(valid_texts)
+                    self.is_fitted = True
+                    logger.info(f"TF-IDF vectorizer fitted on {len(valid_texts)} documents")
+                except Exception as e:
+                    logger.error(f"Error fitting TF-IDF: {e}")
+                    self._fit_fallback()
+            else:
+                # Not enough documents, use fallback
+                self._fit_fallback()
+
+    def _fit_fallback(self):
+        """Fallback fitting with medical vocabulary"""
         try:
-            logger.info(f"Loading embedding model: {self.model_name}")
-            self.model = SentenceTransformer(self.model_name)
-            logger.info("Embedding model loaded successfully")
+            # Extended medical vocabulary for better embeddings
+            medical_texts = [
+                "patient diagnosis treatment medical condition",
+                "symptoms disease medicine health care",
+                "doctor hospital clinic surgery operation",
+                "medication dosage prescription therapy treatment",
+                "blood pressure heart rate temperature",
+                "infection virus bacteria antibiotic",
+                "pain fever headache nausea vomiting",
+                "examination test results laboratory",
+                "chronic acute condition illness",
+                "respiratory cardiovascular neurological"
+            ]
+
+            # Use simpler TF-IDF settings for fallback
+            fallback_vectorizer = TfidfVectorizer(
+                max_features=self.embedding_dim,
+                stop_words='english',
+                min_df=1,
+                max_df=1.0,
+                ngram_range=(1, 1)  # Only unigrams for stability
+            )
+
+            fallback_vectorizer.fit(medical_texts)
+            self.vectorizer = fallback_vectorizer
+            self.is_fitted = True
+            logger.info("TF-IDF fitted with medical vocabulary fallback")
+
         except Exception as e:
-            logger.error(f"Error loading embedding model: {str(e)}")
-            try:
-                self.model_name = "sentence-transformers/paraphrase-MiniLM-L3-v2"
-                self.model = SentenceTransformer(self.model_name)
-                logger.info(f"Loaded fallback model: {self.model_name}")
-            except Exception as e2:
-                logger.error(f"Failed to load fallback model: {str(e2)}")
-                raise
+            logger.error(f"Fallback fitting failed: {e}")
+            # Ultimate fallback - simple hash-based embeddings
+            self.is_fitted = True
 
-    def _load_cache(self):
-        """Load embedding cache from disk"""
-        if os.path.exists(self.cache_file):
-            try:
-                with open(self.cache_file, 'rb') as f:
-                    self.embedding_cache = pickle.load(f)
-                logger.info(f"Loaded {len(self.embedding_cache)} cached embeddings")
-            except Exception as e:
-                logger.warning(f"Could not load embedding cache: {str(e)}")
-                self.embedding_cache = {}
+    def _hash_embed(self, text: str) -> np.ndarray:
+        """Hash-based embedding fallback"""
+        try:
+            # Create multiple hash values for better distribution
+            hash_funcs = [
+                lambda x: hashlib.md5(x.encode()).hexdigest(),
+                lambda x: hashlib.sha1(x.encode()).hexdigest(),
+            ]
 
-    def _save_cache(self):
-        """Save embedding cache to disk"""
-        with self._cache_lock:
-            try:
-                with open(self.cache_file, 'wb') as f:
-                    pickle.dump(self.embedding_cache, f, protocol=pickle.HIGHEST_PROTOCOL)
-                logger.info(f"Saved {len(self.embedding_cache)} embeddings to cache")
-            except Exception as e:
-                logger.warning(f"Could not save embedding cache: {str(e)}")
+            # Combine hash values
+            combined_hash = ""
+            for hash_func in hash_funcs:
+                combined_hash += hash_func(text)
 
-    def _get_cache_key(self, text: str) -> str:
-        """Generate cache key for text"""
-        content = f"{self.model_name}:{text.strip()}"
-        return hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]
+            # Convert to numeric array
+            hash_bytes = bytes.fromhex(combined_hash[:192])  # Use hex for bytes
+            hash_array = np.frombuffer(hash_bytes, dtype=np.uint8).astype(np.float32)
+
+            # Pad to full dimension
+            if len(hash_array) < self.embedding_dim:
+                padding = np.random.normal(0, 0.1, self.embedding_dim - len(hash_array)).astype(np.float32)
+                hash_array = np.concatenate([hash_array, padding])
+            else:
+                hash_array = hash_array[:self.embedding_dim]
+
+            # Normalize
+            norm = np.linalg.norm(hash_array)
+            if norm > 0:
+                hash_array = hash_array / norm
+
+            return hash_array.astype(np.float32)
+
+        except Exception as e:
+            logger.error(f"Hash embedding failed: {e}")
+            return np.random.normal(0, 0.1, self.embedding_dim).astype(np.float32)
 
     def embed_text(self, text: str) -> np.ndarray:
-        """Generate embedding for a single text"""
-        if not text.strip():
-            return np.zeros(self.model.get_sentence_embedding_dimension())
-
-        cache_key = self._get_cache_key(text)
-
-        if cache_key in self.embedding_cache:
-            return self.embedding_cache[cache_key]
-
+        """Generate TF-IDF embedding for text"""
         try:
-            embedding = self.model.encode(text.strip(), convert_to_numpy=True, normalize_embeddings=True)
-            self.embedding_cache[cache_key] = embedding
-            return embedding
-        except Exception as e:
-            logger.error(f"Error generating embedding: {str(e)}")
-            raise
+            if not text or not text.strip():
+                return np.zeros(self.embedding_dim, dtype=np.float32)
 
-    def embed_texts(self, texts: List[str], batch_size: int = 64) -> List[np.ndarray]:
-        """Generate embeddings for multiple texts"""
-        embeddings = []
-        cached_embeddings = {}
-        new_texts = []
-        new_indices = []
+            # Ensure vectorizer is fitted
+            if not self.is_fitted:
+                self._ensure_fitted([text])
 
-        for i, text in enumerate(texts):
-            if not text.strip():
-                cached_embeddings[i] = np.zeros(self.model.get_sentence_embedding_dimension())
-                continue
+            processed_text = self._preprocess_text(text)
 
-            cache_key = self._get_cache_key(text)
-            if cache_key in self.embedding_cache:
-                cached_embeddings[i] = self.embedding_cache[cache_key]
-            else:
-                new_texts.append(text.strip())
-                new_indices.append(i)
+            # Handle case where TF-IDF fitting failed
+            if not hasattr(self.vectorizer, 'vocabulary_') or not self.vectorizer.vocabulary_:
+                # Use hash-based embedding as ultimate fallback
+                return self._hash_embed(processed_text)
 
-        if new_texts:
             try:
-                logger.info(f"Generating embeddings for {len(new_texts)} new texts")
-                new_embeddings = self.model.encode(
-                    new_texts,
-                    batch_size=batch_size,
-                    convert_to_numpy=True,
-                    normalize_embeddings=True,
-                    show_progress_bar=False
-                )
+                # Get TF-IDF vector
+                tfidf_vector = self.vectorizer.transform([processed_text]).toarray()[0]
 
-                for i, embedding in enumerate(new_embeddings):
-                    original_index = new_indices[i]
-                    cache_key = self._get_cache_key(new_texts[i])
-                    self.embedding_cache[cache_key] = embedding
-                    cached_embeddings[original_index] = embedding
+                # Ensure exact dimension
+                if len(tfidf_vector) < self.embedding_dim:
+                    padding = np.zeros(self.embedding_dim - len(tfidf_vector))
+                    tfidf_vector = np.concatenate([tfidf_vector, padding])
+                else:
+                    tfidf_vector = tfidf_vector[:self.embedding_dim]
 
-            except Exception as e:
-                logger.error(f"Error generating batch embeddings: {str(e)}")
-                raise
+                return tfidf_vector.astype(np.float32)
 
-        embeddings = [cached_embeddings[i] for i in range(len(texts))]
+            except Exception as tfidf_error:
+                logger.warning(f"TF-IDF transform failed: {tfidf_error}, using hash fallback")
+                return self._hash_embed(processed_text)
 
-        if new_texts:
-            self._save_cache()
-
-        return embeddings
-
-    def embed_medical_chunks(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Generate embeddings for medical document chunks"""
-        logger.info(f"Generating embeddings for {len(chunks)} chunks")
-
-        texts_to_embed = []
-        for chunk in chunks:
-            content = chunk['content']
-            parts = []
-
-            if chunk.get('section') and chunk['section'] != 'Unknown':
-                parts.append(f"Section: {chunk['section']}")
-
-            if chunk.get('medical_context'):
-                context = chunk['medical_context']
-                context_text = []
-                for key, label in [
-                    ('contains_diagnosis', 'diagnosis'),
-                    ('contains_treatment', 'treatment'),
-                    ('contains_symptoms', 'symptoms'),
-                    ('contains_procedures', 'procedures')
-                ]:
-                    if context.get(key):
-                        context_text.append(label)
-
-                if context_text:
-                    parts.append(f"Medical context: {', '.join(context_text)}")
-
-            parts.append(content)
-            texts_to_embed.append('. '.join(parts))
-
-        embeddings = self.embed_texts(texts_to_embed)
-
-        enhanced_chunks = []
-        for i, chunk in enumerate(chunks):
-            enhanced_chunk = {
-                **chunk,
-                'embedding': embeddings[i],
-                'embedding_model': self.model_name,
-                'embedding_dimension': len(embeddings[i])
-            }
-            enhanced_chunks.append(enhanced_chunk)
-
-        logger.info("Embeddings generated successfully")
-        return enhanced_chunks
-
-    def calculate_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
-        """Calculate cosine similarity between two embeddings"""
-        try:
-            return float(np.dot(embedding1, embedding2))
         except Exception as e:
-            logger.error(f"Error calculating similarity: {str(e)}")
+            logger.error(f"Error embedding text: {e}")
+            return np.zeros(self.embedding_dim, dtype=np.float32)
+
+    def embed_texts(self, texts: List[str], batch_size: int = 32) -> List[np.ndarray]:
+        """Generate embeddings for multiple texts"""
+        try:
+            if not texts:
+                return []
+
+            # Ensure vectorizer is fitted
+            if not self.is_fitted:
+                self._ensure_fitted(texts)
+
+            # Process all texts
+            processed_texts = [self._preprocess_text(text) if text else "" for text in texts]
+
+            # Handle case where TF-IDF fitting failed
+            if not hasattr(self.vectorizer, 'vocabulary_') or not self.vectorizer.vocabulary_:
+                # Use hash-based embeddings
+                return [self._hash_embed(text) for text in processed_texts]
+
+            try:
+                # Get TF-IDF vectors
+                tfidf_matrix = self.vectorizer.transform(processed_texts).toarray()
+
+                embeddings = []
+                for tfidf_vector in tfidf_matrix:
+                    # Ensure correct dimension
+                    if len(tfidf_vector) < self.embedding_dim:
+                        padding = np.zeros(self.embedding_dim - len(tfidf_vector))
+                        tfidf_vector = np.concatenate([tfidf_vector, padding])
+                    else:
+                        tfidf_vector = tfidf_vector[:self.embedding_dim]
+
+                    embeddings.append(tfidf_vector.astype(np.float32))
+
+                return embeddings
+
+            except Exception as tfidf_error:
+                logger.warning(f"TF-IDF batch transform failed: {tfidf_error}, using hash fallback")
+                return [self._hash_embed(text) for text in processed_texts]
+
+        except Exception as e:
+            logger.error(f"Error embedding texts: {e}")
+            return [np.zeros(self.embedding_dim, dtype=np.float32) for _ in texts]
+
+    def embed_query(self, query: str) -> np.ndarray:
+        """Generate embedding for search query"""
+        return self.embed_text(query)
+
+    def similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+        """Calculate cosine similarity"""
+        try:
+            norm1 = np.linalg.norm(embedding1)
+            norm2 = np.linalg.norm(embedding2)
+
+            if norm1 == 0 or norm2 == 0:
+                return 0.0
+
+            similarity = np.dot(embedding1, embedding2) / (norm1 * norm2)
+            return float(similarity)
+
+        except Exception as e:
+            logger.error(f"Error calculating similarity: {e}")
             return 0.0
 
-    def find_similar_chunks(self, query_embedding: np.ndarray,
-                            chunk_embeddings: List[np.ndarray],
-                            top_k: int = 5) -> List[Dict[str, Any]]:
-        """Find most similar chunks to a query embedding"""
-        if not chunk_embeddings:
+    def find_most_similar(self, query_embedding: np.ndarray,
+                          embeddings: List[np.ndarray],
+                          top_k: int = 5) -> List[tuple]:
+        """Find most similar embeddings"""
+        try:
+            similarities = []
+            for i, emb in enumerate(embeddings):
+                sim = self.similarity(query_embedding, emb)
+                similarities.append((i, sim))
+
+            similarities.sort(key=lambda x: x[1], reverse=True)
+            return similarities[:top_k]
+
+        except Exception as e:
+            logger.error(f"Error finding similar embeddings: {e}")
             return []
 
-        similarities = np.dot(np.vstack(chunk_embeddings), query_embedding)
-        top_indices = np.argsort(similarities)[-top_k:][::-1]
+    def embed_medical_chunks(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Embed medical document chunks"""
+        try:
+            if not chunks:
+                return []
 
-        return [{'index': int(idx), 'similarity': float(similarities[idx])}
-                for idx in top_indices]
+            # Extract content from chunks
+            texts = []
+            for chunk in chunks:
+                content = chunk.get('content', '')
+                if isinstance(content, str):
+                    texts.append(content)
+                else:
+                    texts.append(str(content))
 
-    def create_medical_query_embedding(self, query: str, query_type: str = "general") -> np.ndarray:
-        """Create optimized embedding for medical queries"""
-        query_prefixes = {
-            "diagnosis": "Medical diagnosis: ",
-            "treatment": "Medical treatment: ",
-            "symptoms": "Medical symptoms: ",
-            "drug_interaction": "Drug interaction: ",
-            "guidelines": "Clinical guidelines: "
-        }
+            # Generate embeddings
+            embeddings = self.embed_texts(texts)
 
-        enhanced_query = query_prefixes.get(query_type, "") + query
-        return self.embed_text(enhanced_query)
+            # Add embeddings to chunks
+            enriched_chunks = []
+            for i, chunk in enumerate(chunks):
+                new_chunk = chunk.copy()
+                if i < len(embeddings):
+                    new_chunk['embedding'] = embeddings[i]
+                else:
+                    new_chunk['embedding'] = np.zeros(self.embedding_dim, dtype=np.float32)
+                enriched_chunks.append(new_chunk)
 
-    def get_embedding_stats(self) -> Dict[str, Any]:
-        """Get statistics about embeddings"""
+            logger.info(f"Successfully embedded {len(enriched_chunks)} medical chunks")
+            return enriched_chunks
+
+        except Exception as e:
+            logger.error(f"Error embedding medical chunks: {e}")
+            return chunks
+
+    def create_medical_query_embedding(self, query: str, context: str = None) -> np.ndarray:
+        """Create embedding for medical query with optional context"""
+        try:
+            # Combine query with context if provided
+            if context and context.strip():
+                enhanced_query = f"{context} {query}"
+            else:
+                enhanced_query = query
+
+            return self.embed_text(enhanced_query)
+
+        except Exception as e:
+            logger.error(f"Error creating medical query embedding: {e}")
+            return np.zeros(self.embedding_dim, dtype=np.float32)
+
+    def get_embedding_dimension(self) -> int:
+        """Get the embedding dimension"""
+        return self.embedding_dim
+
+    def get_model_info(self) -> Dict[str, Any]:
+        """Get model information"""
         return {
             'model_name': self.model_name,
-            'cached_embeddings': len(self.embedding_cache),
-            'embedding_dimension': self.model.get_sentence_embedding_dimension() if self.model else None,
-            'cache_file_exists': os.path.exists(self.cache_file)
+            'embedding_dimension': self.embedding_dim,
+            'model_type': 'TF-IDF',
+            'is_fitted': self.is_fitted,
+            'cache_dir': self.cache_dir
         }
 
-    def clear_cache(self):
-        """Clear embedding cache"""
-        self.embedding_cache = {}
-        if os.path.exists(self.cache_file):
-            os.remove(self.cache_file)
-        logger.info("Embedding cache cleared")
 
-    def export_embeddings(self, chunks: List[Dict[str, Any]], output_path: str):
-        """Export embeddings to file"""
-        embeddings_data = []
-        for chunk in chunks:
-            if 'embedding' in chunk:
-                embeddings_data.append({
-                    'chunk_id': chunk.get('chunk_id', ''),
-                    'content': chunk['content'][:200],
-                    'embedding': chunk['embedding'].tolist(),
-                    'section': chunk.get('section', ''),
-                    'document_source': chunk.get('document_source', '')
-                })
-
-        with open(output_path, 'wb') as f:
-            pickle.dump(embeddings_data, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-        logger.info(f"Exported {len(embeddings_data)} embeddings to {output_path}")
-
-    def load_embeddings(self, input_path: str) -> List[Dict[str, Any]]:
-        """Load embeddings from file"""
-        with open(input_path, 'rb') as f:
-            embeddings_data = pickle.load(f)
-
-        for item in embeddings_data:
-            item['embedding'] = np.array(item['embedding'])
-
-        logger.info(f"Loaded {len(embeddings_data)} embeddings from {input_path}")
-        return embeddings_data
+# Use minimal manager as default
+EmbeddingManager = MinimalEmbeddingManager
